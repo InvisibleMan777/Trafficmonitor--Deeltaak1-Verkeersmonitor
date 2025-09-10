@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <util/delay.h>
 
-#define SAMPLE_RATE 10
+#define ANTI_DEBOUNCE_DELAY 10
 
 int main() {
     int unitCounter = 0; //counter of units that have passed triggers of button0 and button1
@@ -21,15 +21,14 @@ int main() {
 
     //main loop
     while (true) {
-        //samplerate (default 10ms). Lower rates increase risk of debounce issues
-        _delay_ms(SAMPLE_RATE);
-
         //updating the leds (pb0-pb3) to display the unit count in binary every cycle
         PORTB ^= PORTB ^ (unitCounter & (1 << PORTB0 | 1 << PORTB1 | 1 << PORTB2 | 1 << PORTB3));
 
         //check state of button0
         switch (buttonPressed[0]) {
             case true:
+                _delay_ms(ANTI_DEBOUNCE_DELAY);
+
                 //button is being released
                 if (PIND & (1 << PIND2)) {
                     buttonPressed[0] = false;
@@ -48,6 +47,8 @@ int main() {
         //check state of button1
         switch (buttonPressed[1]) {
             case true:
+                _delay_ms(ANTI_DEBOUNCE_DELAY);
+
                 //button is being released
                 if (PIND & (1 << PIND3)) {
                     buttonPressed[1] = false;
