@@ -7,6 +7,7 @@
 int main() {
     int count = 0;
     bool buttonPressed[2] = {false, false};
+    int activeTriggers =0;
 
     //pin 8-11 are outputs
     DDRB |= (1 << DDB0); 
@@ -43,19 +44,46 @@ int main() {
             case false:
                 //button is being pressed
                 if (!(PIND & (1 << PIND2))) {
-                    count++;
-
-                    //cast to string is neccesairy to transmit the count
-                    char str[2400];
-                    sprintf(str, "%d", count);
-
-                    //transmit count
-                    for (int i = 0; str[i] != '\0'; i++) {
-                        USART_Transmit(str[i]);
-                    }
-                    USART_Transmit('\n');
-
+                    activeTriggers++;
                     buttonPressed[0] = true;
+                }
+                break;
+        }
+
+        //check buttonstate of button1
+        switch (buttonPressed[1]) {
+            //button1 pressed
+            case true:
+                //delay for debounce
+                _delay_ms(50);
+
+                //button is being released
+                if (PIND & (1 << PIND3)) {
+                    buttonPressed[1] = false;
+                }
+                break;
+
+            //button1 not pressed
+            case false:
+                //button is being pressed
+                if (!(PIND & (1 << PIND3))) {
+                    //if button0 is pressed before and a trigger is initialised
+                    if (activeTriggers > 0) {
+                        count++;
+                        activeTriggers--;
+
+                        //cast to string is neccesairy to transmit the count
+                        char str[2400];
+                        sprintf(str, "%d", count);
+
+                        //transmit count
+                        for (int i = 0; str[i] != '\0'; i++) {
+                            USART_Transmit(str[i]);
+                        }
+                        USART_Transmit('\n');
+
+                        buttonPressed[1] = true;
+                    }
                 }
                 break;
         }
