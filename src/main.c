@@ -4,34 +4,32 @@
 #include <stdio.h>
 #include <util/delay.h>
 
+#define SAMPLE_RATE 50
+
 int main() {
     int unitCounter = 0; //counter of units that have passed triggers of button0 and button1
     bool buttonPressed[2] = {false, false}; //button states of button0 and button1
     int unitsInProcess = 0; //counter of units between triggers of button0 and button1
 
     //pin 8-11 are outputs
-    DDRB |= (1 << DDB0); 
-    DDRB |= (1 << DDB1); 
-    DDRB |= (1 << DDB2); 
-    DDRB |= (1 << DDB3); 
+    DDRB |= (1 << DDB0 | 1 << DDB1 | 1 << DDB2 | 1 << DDB3); 
     //pin 2 and 3 are pullup inputs
-    PORTD |= (1 << PORTD2);
-    PORTD |= (1 << PORTD3);
+    PORTD |= (1 << PORTD2 | 1 << PORTD3);
 
     //initialize serial communication
     USART_Init();
 
     //main loop
     while (true) {
+        //samplerate (default 50ms). Lower rates increase risk of debounce issues
+        _delay_ms(SAMPLE_RATE);
+
         //updating the leds (pb0-pb3) to display the unit count in binary every cycle
-        PORTB ^= PORTB ^ (unitCounter & 0b00001111);
+        PORTB ^= PORTB ^ (unitCounter & (1 << PORTB0 | 1 << PORTB1 | 1 << PORTB2 | 1 << PORTB3));
 
         //check state of button0
         switch (buttonPressed[0]) {
             case true:
-                //anti debounce
-                _delay_ms(50);
-
                 //button is being released
                 if (PIND & (1 << PIND2)) {
                     buttonPressed[0] = false;
@@ -50,9 +48,6 @@ int main() {
         //check state of button1
         switch (buttonPressed[1]) {
             case true:
-                //anti debounce
-                _delay_ms(50);
-
                 //button is being released
                 if (PIND & (1 << PIND3)) {
                     buttonPressed[1] = false;
