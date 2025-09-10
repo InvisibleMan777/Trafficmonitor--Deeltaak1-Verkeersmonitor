@@ -5,17 +5,16 @@
 #include <util/delay.h>
 
 int main() {
-    int count = 0;
-    bool buttonPressed[2] = {false, false};
-    int activeTriggers =0;
+    int unitCounter = 0; //counter of units that have passed triggers of button0 and button1
+    bool buttonPressed[2] = {false, false}; //button states of button0 and button1
+    int unitsInProcess = 0; //counter of units between triggers of button0 and button1
 
     //pin 8-11 are outputs
     DDRB |= (1 << DDB0); 
     DDRB |= (1 << DDB1); 
     DDRB |= (1 << DDB2); 
     DDRB |= (1 << DDB3); 
-
-    //port 2 and 3 are pullup inputs
+    //pin 2 and 3 are pullup inputs
     PORTD |= (1 << PORTD2);
     PORTD |= (1 << PORTD3);
 
@@ -24,14 +23,13 @@ int main() {
 
     //main loop
     while (true) {
-        //updating the leds (pb0-pb3) to display the count in binary every cycle
-        PORTB ^= PORTB ^ (count & 0b00001111);
+        //updating the leds (pb0-pb3) to display the unit count in binary every cycle
+        PORTB ^= PORTB ^ (unitCounter & 0b00001111);
 
-        //check buttonstate of button0
+        //check state of button0
         switch (buttonPressed[0]) {
-            //button0 pressed
             case true:
-                //delay for debounce
+                //anti debounce
                 _delay_ms(50);
 
                 //button is being released
@@ -40,21 +38,19 @@ int main() {
                 }
                 break;
 
-            //button0 not pressed
             case false:
                 //button is being pressed
                 if (!(PIND & (1 << PIND2))) {
-                    activeTriggers++;
+                    unitsInProcess++;
                     buttonPressed[0] = true;
                 }
                 break;
         }
 
-        //check buttonstate of button1
+        //check state of button1
         switch (buttonPressed[1]) {
-            //button1 pressed
             case true:
-                //delay for debounce
+                //anti debounce
                 _delay_ms(50);
 
                 //button is being released
@@ -63,20 +59,19 @@ int main() {
                 }
                 break;
 
-            //button1 not pressed
             case false:
                 //button is being pressed
                 if (!(PIND & (1 << PIND3))) {
-                    //if button0 is pressed before and a trigger is initialised
-                    if (activeTriggers > 0) {
-                        count++;
-                        activeTriggers--;
+                    //if there is at least 1 trigger in process (initialized by button0)
+                    if (unitsInProcess > 0) {
+                        unitCounter++;
+                        unitsInProcess--;
 
                         //cast to string is neccesairy to transmit the count
                         char str[2400];
-                        sprintf(str, "%d", count);
+                        sprintf(str, "%d", unitCounter);
 
-                        //transmit count
+                        //transmit unit count to serial
                         for (int i = 0; str[i] != '\0'; i++) {
                             USART_Transmit(str[i]);
                         }
