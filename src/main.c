@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <util/delay.h>
 
-#define SAMPLE_RATE 50
+#define SAMPLE_RATE 10
 
 int main() {
     int unitCounter = 0; //counter of units that have passed triggers of button0 and button1
@@ -21,7 +21,7 @@ int main() {
 
     //main loop
     while (true) {
-        //samplerate (default 50ms). Lower rates increase risk of debounce issues
+        //samplerate (default 10ms). Lower rates increase risk of debounce issues
         _delay_ms(SAMPLE_RATE);
 
         //updating the leds (pb0-pb3) to display the unit count in binary every cycle
