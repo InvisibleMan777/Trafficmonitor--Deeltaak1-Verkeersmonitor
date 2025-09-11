@@ -3,35 +3,47 @@
 #include <usart.h>
 #include <stdio.h>
 #include <util/delay.h>
+#include <Arduino.h>
+
+#define ANTI_DEBOUNCE_DELAY 200 //time in ms between checks if buttons are released to prevent the negative implications of debounce
+
+//initialize IO pins
+void initialiseIO() {
+    //pb0-pb3 (pin 8-11 on the arduino) are outputs
+    DDRB |= (1 << DDB0 | 1 << DDB1 | 1 << DDB2 | 1 << DDB3); 
+    //pd2 and pd3 (pin 2 and 3 on the arduino) are pullup inputs
+    PORTD |= (1 << PORTD2 | 1 << PORTD3);
+}
+
+//updating the leds (pb0-pb3) to display the unit count in binary every cycle
+void displayCounter(int unitCounter) {
+    PORTB ^= PORTB ^ (unitCounter & (1 << PORTB0 | 1 << PORTB1 | 1 << PORTB2 | 1 << PORTB3));
+}
 
 int main() {
-    int count = 0;
-    bool buttonPressed[2] = {false, false};
+    unsigned int unitCounter = 0; //counter of units that have passed button0 and button1
+    bool buttonPressed[2] = {false, false}; //button states of button0 and button1
+    unsigned short int unitsInProcess = 0; //counter of units that have passed button0 but not yet button1
+    unsigned long timeSinceLastTrigger = millis(); //time since last button press
 
-    //pin 8-11 are outputs
-    DDRB |= (1 << DDB0); 
-    DDRB |= (1 << DDB1); 
-    DDRB |= (1 << DDB2); 
-    DDRB |= (1 << DDB3); 
-
-    //port 2 and 3 are pullup inputs
-    PORTD |= (1 << PORTD2);
-    PORTD |= (1 << PORTD3);
-
+    //initialise arduino
+    init();
+    //initialize io pins
+    initialiseIO();
     //initialize serial communication
     USART_Init();
 
     //main loop
     while (true) {
-        //updating the leds (pb0-pb3) to display the count in binary every cycle
-        PORTB ^= PORTB ^ (count & 0b00001111);
+        //updating the leds (pb0-pb3) to display the unit count in binary every cycle
+        displayCounter(unitCounter);
 
-        //check buttonstate of button0
+        //check state of button0
         switch (buttonPressed[0]) {
-            //button0 pressed
             case true:
-                //delay for debounce
-                _delay_ms(50);
+                if (millis() - timeSinceLastTrigger < ANTI_DEBOUNCE_DELAY) {
+                    break;
+                }
 
                 //button is being released
                 if (PIND & (1 << PIND2)) {
@@ -39,23 +51,53 @@ int main() {
                 }
                 break;
 
-            //button0 not pressed
             case false:
                 //button is being pressed
                 if (!(PIND & (1 << PIND2))) {
-                    count++;
-
-                    //cast to string is neccesairy to transmit the count
-                    char str[2400];
-                    sprintf(str, "%d", count);
-
-                    //transmit count
-                    for (int i = 0; str[i] != '\0'; i++) {
-                        USART_Transmit(str[i]);
-                    }
-                    USART_Transmit('\n');
+                    //not more then 255 units in process
+                    if (unitsInProcess < 255) {
+                        unitsInProcess++;
+                    }       
 
                     buttonPressed[0] = true;
+                    timeSinceLastTrigger = millis();
+                }
+                break;
+        }
+
+        //check state of button1
+        switch (buttonPressed[1]) {
+            case true:
+                if (millis() - timeSinceLastTrigger < ANTI_DEBOUNCE_DELAY) {
+                    break;
+                }
+
+                //button is being released
+                if (PIND & (1 << PIND3)) {
+                    buttonPressed[1] = false;
+                }
+                break;
+
+            case false:
+                //button is being pressed
+                if (!(PIND & (1 << PIND3))) {
+                    if (unitsInProcess > 0) {
+                        unitCounter++;
+                        unitsInProcess--;
+
+                        //cast to string is neccesairy to transmit the count
+                        char str[2400];
+                        sprintf(str, "%u", unitCounter);
+
+                        //transmit unit count to serial
+                        for (int i = 0; str[i] != '\0'; i++) {
+                            USART_Transmit(str[i]);
+                        }
+                        USART_Transmit('\n');
+
+                        buttonPressed[1] = true;
+                        timeSinceLastTrigger = millis();
+                    }
                 }
                 break;
         }
