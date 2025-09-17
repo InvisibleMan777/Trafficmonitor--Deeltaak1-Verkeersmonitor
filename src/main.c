@@ -41,14 +41,14 @@ void displayNumberOnDigit(uint8_t number, uint8_t digitPort) {
     PORTB &= ~(1 << digitPort);
 
     //define segment positions
-    #define SDP4 0
-    #define SDP5 1
-    #define SDP6 2
-    #define SDP7 3
-    #define SBP0 4
-    #define SBP4 5
-    #define SBP5 6
-    #define SBP6 7
+    #define SPD4 0
+    #define SPD5 1
+    #define SPD6 2
+    #define SPD7 3
+    #define SPB0 4
+    #define SPB4 5
+    #define SPB5 6
+    #define SPB6 7
 
     //segment mapping for numbers 0-9
     const uint8_t segmentMap[] = {
@@ -72,17 +72,14 @@ void displayNumberOnDigit(uint8_t number, uint8_t digitPort) {
     PORTB &= ~((1 << PB0) | (1 << PB4) | (1 << PB5) | (1 << PB6));
 
     //set segment pins according to segmentMap
-    if (segments & (1 << SDP4)) PORTD |= (1 << PD4);
-    if (segments & (1 << SDP5)) PORTD |= (1 << PD5);
-    if (segments & (1 << SDP6)) PORTD |= (1 << PD6);
-    if (segments & (1 << SDP7)) PORTD |= (1 << PD7);
-    if (segments & (1 << SBP0)) PORTB |= (1 << PB0);
-    if (segments & (1 << SBP4)) PORTB |= (1 << PB4);
-    if (segments & (1 << SBP5)) PORTB |= (1 << PB5);
-    if (segments & (1 << SBP6)) PORTB |= (1 << PB6);
-
-    //display time
-    _delay_ms(1);
+    if (segments & (1 << SPD4)) PORTD |= (1 << PD4);
+    if (segments & (1 << SPD5)) PORTD |= (1 << PD5);
+    if (segments & (1 << SPD6)) PORTD |= (1 << PD6);
+    if (segments & (1 << SPD7)) PORTD |= (1 << PD7);
+    if (segments & (1 << SPB0)) PORTB |= (1 << PB0);
+    if (segments & (1 << SPB4)) PORTB |= (1 << PB4);
+    if (segments & (1 << SPB5)) PORTB |= (1 << PB5);
+    if (segments & (1 << SPB6)) PORTB |= (1 << PB6);
 
     //turn off digit
     PORTB |= (1 << digitPort);
