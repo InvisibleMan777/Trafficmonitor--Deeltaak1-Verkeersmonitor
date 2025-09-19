@@ -7,6 +7,7 @@
 #define ANTI_DEBOUNCE_DELAY 200 //time in ms between checks if buttons are released to prevent the negative implications of debounce
 #define SEGMENT_DISPLAY_REFRESHRATE 5 //time in ms between updates of the 4x7seg display digits to create the illusion that all digits are on at the same time
 #define DISTANCE_BETWEEN_BUTTONS_CM 60 //distance in centimeters between the two buttons, used to calculate speed
+#define MAX_UNITS_IN_PROCESS 1 //the maximum number of units that can be in process at the same time
 #define MIN_SPEED 1 //the minimum speed that can be calculated in dm/s, speeds lower then this will be rounded to this value
 #define MAX_SPEED 28 //the maximum speed that can be calculated in dm/s, speeds higher then this will be rounded to this value
 
@@ -31,6 +32,7 @@ uint16_t unitCounter = 0; //counter of units that have passed button0 and button
 uint8_t unitsInProcess = 0; //counter of units that have passed button0 but not yet button1
 uint64_t timeSinceLastTrigger[2] = {0,0}; //time since last button press of button0 and button1
 uint64_t startOfDisplayUpdate = 0; //we use this to decide what digit to update on the 4x7seg display
+uint64_t timeSinceLastUnitInProcess = 0; //the time when the latest unit started the process by pressing button0
 uint8_t unitSpeed = 69; //the speed of the (latest) unit passing the system in hm/u. defaults to 69 so the segmentleds can be tested at startup
 uint8_t calculatingSpeed = 0; //updated every cycle while calculating the speed before being assigned to unitSpeed
 bool buttonPressed[2] = {false, false}; //button states of button0 and button1
@@ -238,17 +240,21 @@ int main() {
                 unitSpeed = MIN_SPEED;
             } else {
                 //we calculate the speed every cycle so we can stop the calculation prematurely if the speed is very low (<=MIN_SPEED hm/u)
-                calculatingSpeed = calculateSpeed(timeSinceLastTrigger[button0.buttonid], millis());
+                calculatingSpeed = calculateSpeed(timeSinceLastUnitInProcess, millis());
             }
         }
 
         //button0 handling
         if (unitPassedButton(button0)) {
-            //reset speed calculation
-            unitSpeed = 0;
-            calculatingSpeed = MAX_SPEED; //start the calculation at max speed so it can only go down from there
-            //add unit to process
-            unitsInProcess++;
+            //not more then MAX_UNITS_IN_PROCESS units in process
+            if (unitsInProcess < MAX_UNITS_IN_PROCESS) {
+                //reset speed calculation
+                unitSpeed = 0;
+                calculatingSpeed = MAX_SPEED; //start the calculation at max speed so it can only go down from there
+                //add unit to process
+                unitsInProcess++;
+                timeSinceLastUnitInProcess = millis();
+            }
         }
 
         //button1 handling
