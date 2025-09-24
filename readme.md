@@ -1,6 +1,6 @@
 # Deeltaak 1 - Verkeersmonitor
 
-Made by Sem Overbeek on the intructions of Windesheim. The goal of the project was to create a trafficmonitor that has 2 primary functions: Count the amounth of traffic and measure the speed of passing vehicles. Read documentation for further info.
+Made by Sem Overbeek as asignment of Windesheim. The goal of the project was to create a trafficmonitor that has 2 primary functions: Count the amounth of traffic and measure the speed of passing vehicles. Read documentation for further info, NOTE: while all code and commits are written in english, the documentation is writen in dutch as per requirement of the asignment.
 
 ## Project Structure
 
