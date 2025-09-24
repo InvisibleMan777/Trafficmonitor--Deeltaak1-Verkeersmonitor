@@ -4,12 +4,13 @@
 #include <util/delay.h>
 #include <Arduino.h>
 
-#define ANTI_DEBOUNCE_DELAY 200 //time in ms between checks if buttons are released to prevent the negative implications of debounce
-#define SEGMENT_DISPLAY_REFRESHRATE 5 //time in ms between updates of the 4x7seg display digits to create the illusion that all digits are on at the same time
+#define ANTI_DEBOUNCE_DELAY_MS 200 //time in ms between checks if buttons are released to prevent the negative implications of debounce
+#define DISPLAY_REFRESH_INTERVAL_MS 5 //time in ms between updates of the 4x7seg display digits to create the illusion that all digits are on at the same time
 #define DISTANCE_BETWEEN_BUTTONS_CM 60 //distance in centimeters between the two buttons, used to calculate speed
 #define MAX_UNITS_IN_PROCESS 1 //the maximum number of units that can be in process at the same time
-#define MIN_SPEED 1 //the minimum speed that can be calculated in dm/s, speeds lower then this will be rounded to this value
-#define MAX_SPEED 28 //the maximum speed that can be calculated in dm/s, speeds higher then this will be rounded to this value
+#define MIN_SPEED_DM_PER_S 1 //the minimum speed that can be calculated in dm/s, speeds lower then this will be rounded to this value
+#define MAX_SPEED_DM_PER_S 28 //the maximum speed that can be calculated in dm/s, speeds higher then this will be rounded to this value
+#define MAX_PROCCESSING_TIME_MS 1000 //the maximum time in ms a unit can be in process (between pressing button0 and button1) before it is discarded, to prevent errors
 
 //button enums for the indexes of buttonPressed and timeSinceLastTrigger arrays
 enum Buttons {
@@ -122,7 +123,7 @@ void displayNumberOnDigit(uint8_t number, uint8_t digitPort, bool decimalPoint) 
 uint8_t calculateSpeed(uint64_t starttime, uint64_t endtime) {
     //prevent division by zero and negative speeds
     if (endtime <= starttime) {
-        return MAX_SPEED;
+        return MAX_SPEED_DM_PER_S;
     }
 
     //time difference in milliseconds
@@ -131,11 +132,12 @@ uint8_t calculateSpeed(uint64_t starttime, uint64_t endtime) {
     //conversion factor is 100 because timediff is in ms so multiply by 1000 and then divide by 10 because distance is in cm and we want dm/s
     #define CONVERSION_FACTOR 100
 
+    //the reason we put the conversion factor in the numerator is to prevent loss of precision
     uint8_t speed = round((DISTANCE_BETWEEN_BUTTONS_CM * CONVERSION_FACTOR) / timeDiff);
 
     //cap speed to MAX_SPEED dm/s, if speed is 0 (too fast to measure) we also set it to MAX_SPEED
-    if (speed > MAX_SPEED || speed == 0) {
-        speed = MAX_SPEED;
+    if (speed > MAX_SPEED_DM_PER_S || speed == 0) {
+        speed = MAX_SPEED_DM_PER_S;
     }
     return speed;
 }
@@ -163,12 +165,12 @@ void displaySpeed(int speed) {
     }
 
     //multiplexing. show each digit for SEGMENT_DISPLAY_REFRESHRATE ms before switching to the next digit to create the illusion that all digits are on at the same time
-    if (startOfDisplayUpdate + SEGMENT_DISPLAY_REFRESHRATE > millis()) {
+    if (startOfDisplayUpdate + DISPLAY_REFRESH_INTERVAL_MS > millis()) {
             displayNumberOnDigit(firstDigit, PB1, false);
-    } else if (startOfDisplayUpdate + 2 * SEGMENT_DISPLAY_REFRESHRATE > millis()) {
+    } else if (startOfDisplayUpdate + 2 * DISPLAY_REFRESH_INTERVAL_MS > millis()) {
             //display decimal point on middle digit to show dm/s as m/s (eg 100dm/s = 10.0m/s)
             displayNumberOnDigit(secondDigit, PB2, true);
-    } else if (startOfDisplayUpdate + 3 * SEGMENT_DISPLAY_REFRESHRATE > millis()) {
+    } else if (startOfDisplayUpdate + 3 * DISPLAY_REFRESH_INTERVAL_MS > millis()) {
             displayNumberOnDigit(thirdDigit, PB3, false);
     //reset the cycle after the last digit
     } else {
@@ -178,6 +180,11 @@ void displaySpeed(int speed) {
 
 //updating pc0-pc3 (the 4 leds) to display the unit count in binary
 void displayCounter(int count) {
+    //A ^ (A ^ B) = B
+    //1 ^ (1 ^ 1) = 1 ^ 0 = 1 led is on and needs to stay on
+    //1 ^ (1 ^ 0) = 1 ^ 1 = 0 led is on and needs to be turned off
+    //0 ^ (0 ^ 1) = 0 ^ 1 = 1 led is off and needs to be turned on
+    //0 ^ (0 ^ 0) = 0 ^ 0 = 0 led is off and needs to stay off
     PORTC ^= PORTC ^ (count & (1 << PORTC0 | 1 << PORTC1 | 1 << PORTC2 | 1 << PORTC3));
 }
 
@@ -187,7 +194,7 @@ bool unitPassedButton(button button) {
     switch (buttonPressed[button.buttonid]) {
         case true:
             //anti debounce
-            if (millis() - timeSinceLastTrigger[button.buttonid] < ANTI_DEBOUNCE_DELAY) {
+            if (millis() - timeSinceLastTrigger[button.buttonid] < ANTI_DEBOUNCE_DELAY_MS) {
                 break;
             }
 
@@ -216,41 +223,28 @@ bool unitPassedButton(button button) {
 
 int main() {
     //initialise arduino
+    //NOTE: the only reason we need the arduino library is for the millis() function, which is used for timing
+    //this is not very memory efficient, so for a future version, one of the main optimations we could do: would be to replace this with clock interrupts
     init();
     //initialize io pins
     initialiseIO();
 
+    //storage for unitPassedButton return values
+    bool unitPassedButtonVar[2] = {false, false}; //array to store if a button press has been detected for button0 and button1
+
     //main loop
     while (true) {
-        //update leds to display the unit count in binary
-        displayCounter(unitCounter);
-
-        //update segmentsdisplay to display the speed
-        //display nothing during the calculation (unitSpeed will be reset at every button0 press)
-        if (unitSpeed > 0) {
-            displaySpeed(unitSpeed);
-        } else {
-            PORTB |= (1 << PORTB1 | 1 << PORTB2 | 1 << PORTB3);
-        }
-
-        //calculate speed while a unit is in process
-        if (unitSpeed == 0) {
-            if (calculatingSpeed <= MIN_SPEED) {
-                //end speed calculation prematurely if the calculatingSpeed is already below MIN_SPEED
-                unitSpeed = MIN_SPEED;
-            } else {
-                //we calculate the speed every cycle so we can stop the calculation prematurely if the speed is very low (<=MIN_SPEED hm/u)
-                calculatingSpeed = calculateSpeed(timeSinceLastUnitInProcess, millis());
-            }
-        }
+        //check if units have passed button0 and button1
+        unitPassedButtonVar[button0.buttonid] = unitPassedButton(button0);
+        unitPassedButtonVar[button1.buttonid] = unitPassedButton(button1);
 
         //button0 handling
-        if (unitPassedButton(button0)) {
+        if (unitPassedButtonVar[button0.buttonid]) {
             //not more then MAX_UNITS_IN_PROCESS units in process
             if (unitsInProcess < MAX_UNITS_IN_PROCESS) {
                 //reset speed calculation
                 unitSpeed = 0;
-                calculatingSpeed = MAX_SPEED; //start the calculation at max speed so it can only go down from there
+                calculatingSpeed = MAX_SPEED_DM_PER_S; //start the calculation at max speed so it can only go down from there
                 //add unit to process
                 unitsInProcess++;
                 timeSinceLastUnitInProcess = millis();
@@ -258,18 +252,47 @@ int main() {
         }
 
         //button1 handling
-        if (unitPassedButton(button1)) {
+        if (unitPassedButtonVar[button1.buttonid]) {
             //discard if no units are in process
             if (unitsInProcess > 0) {
                 //complete the unit process
-                unitCounter++;
+
+                //dont count units if they've been in process for more then MAX_PROCCESSING_TIME_MS
+                if (millis() - timeSinceLastUnitInProcess < MAX_PROCCESSING_TIME_MS) {
+                    unitCounter++;
+                }
+
                 unitsInProcess--;
+
+                //however the speed can still be calculated after MAX_PROCCESSING_TIME_MS because that times out when the speed falls below MIN_SPEED
 
                 //if the speedcalculation hasnt been prematury been stopped yet (speed below MIN_SPEED), assign the latest calculated speed to unitSpeed and therby end the calculation
                 if (unitSpeed == 0) {
                     unitSpeed = calculatingSpeed;
                 }
             }
+        }
+
+        //update leds to display the unit count in binary
+        displayCounter(unitCounter);
+
+        //calculate speed while a unit is in process
+        if (unitSpeed == 0) {
+            if (calculatingSpeed <= MIN_SPEED_DM_PER_S) {
+                //end speed calculation prematurely if the calculatingSpeed is already below MIN_SPEED
+                unitSpeed = MIN_SPEED_DM_PER_S;
+            } else {
+                //we calculate the speed every cycle so we can stop the calculation prematurely if the speed is very low (<=MIN_SPEED hm/u)
+                calculatingSpeed = calculateSpeed(timeSinceLastUnitInProcess, millis());
+            }
+        }
+
+        //update segmentsdisplay to display the speed
+        //display nothing during the calculation (unitSpeed will be reset at button0 press)
+        if (unitSpeed > 0) {
+            displaySpeed(unitSpeed);
+        } else {
+            PORTB |= (1 << PORTB1 | 1 << PORTB2 | 1 << PORTB3);
         }
     }
 
