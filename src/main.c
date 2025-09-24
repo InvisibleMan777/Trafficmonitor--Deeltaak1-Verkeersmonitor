@@ -72,7 +72,8 @@ void displayNumberOnDigit(uint8_t number, uint8_t digitPort, bool decimalPoint) 
     //turn on digit by turning port off (making it a ground and allowing current to flow through the digit)
     PORTB &= ~(1 << digitPort);
 
-    //define segment positions in a mappingbyte
+    //we map the segments that need to be turned on for each number in a byte
+    //the positions of segments the byte correspond to the following:
     #define SPD4 0 // segment mid-low
     #define SPD5 1 // segment right-high
     #define SPD6 2 // segment right-low
@@ -81,7 +82,7 @@ void displayNumberOnDigit(uint8_t number, uint8_t digitPort, bool decimalPoint) 
     #define SPB4 5 // segment mid-mid
     #define SPB5 6 // segment mid-high
 
-    //segment mapping for numbers 0-9 in bytes
+    //byte that maps the segments that need to be turned on
     const uint8_t segmentMap[] = {
         0b01011111, // 0
         0b00000110, // 1
@@ -157,14 +158,15 @@ void displaySpeed(int speed) {
         firstDigit = speed / 10;
         secondDigit = speed / 100;
         thirdDigit = speed % 10;
-    //we dont handle speeds of 1000 dm/s (10 m/s) or higher because they are not possible with the current setup, so we just display 9.9 m/s
+    //we only have 3 digits so values higher than 999 will be displayed as 999
     } else {
         firstDigit = 9;
         secondDigit = 9;
         thirdDigit = 9;
     }
 
-    //multiplexing. show each digit for SEGMENT_DISPLAY_REFRESHRATE ms before switching to the next digit to create the illusion that all digits are on at the same time
+    //what we're doing here is multiplexing
+    //show each digit separately for a very short time interval (DISPLAY_REFRESH_INTERVAL_MS) so that it appears that all digits are on at the same time
     if (startOfDisplayUpdate + DISPLAY_REFRESH_INTERVAL_MS > millis()) {
             displayNumberOnDigit(firstDigit, PB1, false);
     } else if (startOfDisplayUpdate + 2 * DISPLAY_REFRESH_INTERVAL_MS > millis()) {
@@ -242,11 +244,14 @@ int main() {
         if (unitPassedButtonVar[button0.buttonid]) {
             //not more then MAX_UNITS_IN_PROCESS units in process
             if (unitsInProcess < MAX_UNITS_IN_PROCESS) {
-                //reset speed calculation
+                //reset speed calculation by setting unitSpeed to 0
                 unitSpeed = 0;
-                calculatingSpeed = MAX_SPEED_DM_PER_S; //start the calculation at max speed so it can only go down from there
+                //start the calculation at max speed so it can only go down from there
+                calculatingSpeed = MAX_SPEED_DM_PER_S;
+
                 //add unit to process
                 unitsInProcess++;
+                //record time when the unit started the process
                 timeSinceLastUnitInProcess = millis();
             }
         }
@@ -255,13 +260,13 @@ int main() {
         if (unitPassedButtonVar[button1.buttonid]) {
             //discard if no units are in process
             if (unitsInProcess > 0) {
-                //complete the unit process
 
                 //dont count units if they've been in process for more then MAX_PROCCESSING_TIME_MS
                 if (millis() - timeSinceLastUnitInProcess < MAX_PROCCESSING_TIME_MS) {
                     unitCounter++;
                 }
 
+                //delete unit from process
                 unitsInProcess--;
 
                 //however the speed can still be calculated after MAX_PROCCESSING_TIME_MS because that times out when the speed falls below MIN_SPEED
@@ -276,10 +281,10 @@ int main() {
         //update leds to display the unit count in binary
         displayCounter(unitCounter);
 
-        //calculate speed while a unit is in process
+        //calculate speed while a unit is in process and the unitspeed has been reset
         if (unitSpeed == 0) {
+             //end speed calculation prematurely if the calculatingSpeed is already below MIN_SPEED
             if (calculatingSpeed <= MIN_SPEED_DM_PER_S) {
-                //end speed calculation prematurely if the calculatingSpeed is already below MIN_SPEED
                 unitSpeed = MIN_SPEED_DM_PER_S;
             } else {
                 //we calculate the speed every cycle so we can stop the calculation prematurely if the speed is very low (<=MIN_SPEED hm/u)
